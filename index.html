@@ -129,7 +129,6 @@
         }
         .delete-btn:hover { color: var(--danger); }
 
-        /* ANTI-SLEEP CHALLENGE MODAL */
         #challengeOverlay {
             position: fixed;
             top: 0; left: 0; width: 100%; height: 100%;
@@ -165,10 +164,8 @@
             margin-bottom: 1rem;
             border: 2px solid #333;
             background: #000;
-        }
-
-        .challenge-input:focus {
-            border-color: var(--cyan);
+            color: white;
+            width: 80%;
         }
 
         .ringing-bg {
@@ -178,12 +175,11 @@
 </head>
 <body>
 
-    <!-- CHALLENGE MODAL -->
     <div id="challengeOverlay">
         <div class="challenge-box">
             <h2 style="color: var(--danger); margin-top: 0;">WAKE UP!</h2>
             <p style="color: #888; font-size: 0.8rem;">SOLVE TO STOP ALARM</p>
-            <div id="mathQuestion">12 + 15</div>
+            <div id="mathQuestion">0 × 0</div>
             <input type="number" id="mathAnswer" class="challenge-input" placeholder="?">
             <button class="btn btn-primary" onclick="verifyChallenge()">Verify & Stop</button>
         </div>
@@ -213,13 +209,13 @@
         </div>
 
         <button class="btn btn-primary" onclick="addTask()">Add Task</button>
-        <p id="systemStatus" style="text-align: center; font-size: 0.7rem; color: #555; margin-top: 1rem;">Logic Secure</p>
     </div>
 
     <div class="task-list" id="taskList"></div>
 
     <audio id="alarmSound" loop>
-        <source src="https://actions.google.com/sounds/v1/alarms/digital_watch_alarm_long.ogg" type="audio/ogg">
+        <!-- Swapped to a more aggressive Siren/Alarm sound -->
+        <source src="https://actions.google.com/sounds/v1/emergency/emergency_siren_short.ogg" type="audio/ogg">
     </audio>
 
     <script>
@@ -242,7 +238,7 @@
 
             const targetMs = new Date(time).getTime();
             if (targetMs < Date.now()) {
-                document.getElementById('systemStatus').innerText = "❌ Choose future time";
+                alert("Choose a future time!");
                 return;
             }
 
@@ -305,7 +301,6 @@
             task.isRinging = true;
             activeTaskId = task.id;
             
-            // Generate multiplication challenge (numbers 3 to 12)
             const num1 = Math.floor(Math.random() * 10) + 3;
             const num2 = Math.floor(Math.random() * 10) + 3;
             currentChallengeAnswer = num1 * num2;
@@ -314,7 +309,9 @@
             document.getElementById('challengeOverlay').style.display = 'flex';
             document.body.classList.add('ringing-bg');
             
-            sound.play().catch(() => console.log("Audio requires interaction"));
+            // LOUD MODE: Force volume to maximum
+            sound.volume = 1.0; 
+            sound.play().catch(() => console.log("User interaction required for audio"));
         }
 
         function verifyChallenge() {
@@ -322,11 +319,8 @@
             if (userAnswer === currentChallengeAnswer) {
                 stopAlarm();
             } else {
-                // Shake effect or feedback for wrong answer
                 document.getElementById('mathAnswer').style.borderColor = 'var(--danger)';
-                setTimeout(() => {
-                    document.getElementById('mathAnswer').style.borderColor = '#333';
-                }, 500);
+                setTimeout(() => { document.getElementById('mathAnswer').style.borderColor = '#333'; }, 500);
                 document.getElementById('mathAnswer').value = "";
             }
         }
