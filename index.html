@@ -5,6 +5,226 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Jedidiah's Pro Task Manager</title>
     <style>
+        /* Your existing CSS remains the same */
+        :root {
+            --bg-dark: #0a0a0a;
+            --card-bg: #161616;
+            --gold: #FFD700;
+            --gold-glow: rgba(255, 215, 0, 0.3);
+            --danger: #ff3333;
+            --cyan: #00f2ff;
+            --inter: 'Inter', system-ui, -apple-system, sans-serif;
+        }
+        body {
+            background-color: var(--bg-dark);
+            color: white;
+            font-family: var(--inter);
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 2rem;
+            min-height: 100vh;
+            transition: background-color 0.8s ease;
+            overflow-x: hidden;
+        }
+        /* ... rest of your CSS (unchanged) ... */
+        .ringing-bg {
+            background-color: #330000 !important;
+        }
+    </style>
+</head>
+<body>
+    <div id="challengeOverlay">
+        <div class="challenge-box">
+            <h2 style="color: var(--danger); margin-top: 0;">WAKE UP!</h2>
+            <p style="color: #888; font-size: 0.8rem;">SOLVE TO STOP ALARM</p>
+            <div id="mathQuestion">0 × 0</div>
+            <input type="number" id="mathAnswer" class="challenge-input" placeholder="?">
+            <button class="btn btn-primary" onclick="verifyChallenge()">Verify & Stop</button>
+        </div>
+    </div>
+
+    <div class="main-card">
+        <h1>Task Manager Pro</h1>
+        <div class="input-group">
+            <label>Task Description</label>
+            <input type="text" id="taskName" placeholder="e.g. Study SEN 122">
+        </div>
+        <div style="display: flex; gap: 10px;">
+            <div class="input-group" style="flex: 2;">
+                <label>Target Time</label>
+                <input type="datetime-local" id="targetTime">
+            </div>
+            <div class="input-group" style="flex: 1;">
+                <label>Priority</label>
+                <select id="priority">
+                    <option value="low">Low</option>
+                    <option value="med">Medium</option>
+                    <option value="high">High</option>
+                </select>
+            </div>
+        </div>
+        <button class="btn btn-primary" onclick="addTask()">Add Task</button>
+    </div>
+
+    <div class="task-list" id="taskList"></div>
+
+    <!-- Alarm Audio -->
+    <audio id="alarmSound" loop preload="auto">
+        <source src="https://cdn.pixabay.com/audio/2022/03/10/audio_7359560f33.mp3" type="audio/mpeg">
+    </audio>
+
+    <script>
+        let tasks = JSON.parse(localStorage.getItem('jedidiahTasks')) || [];
+        let currentChallengeAnswer = null;
+        let activeTaskId = null;
+        let alarmAudio = null;
+        let audioUnlocked = false;
+
+        window.onload = () => {
+            alarmAudio = document.getElementById('alarmSound');
+            
+            // Unlock audio on first user interaction
+            const unlockAudio = () => {
+                if (audioUnlocked) return;
+                audioUnlocked = true;
+                console.log("✅ Audio unlocked for this session");
+                
+                // Test play and immediately pause to unlock
+                alarmAudio.play().then(() => {
+                    alarmAudio.pause();
+                    alarmAudio.currentTime = 0;
+                }).catch(() => {});
+            };
+
+            document.body.addEventListener('click', unlockAudio, { once: true });
+            document.body.addEventListener('touchstart', unlockAudio, { once: true });
+
+            renderTasks();
+            setInterval(updateCountdowns, 1000);
+        };
+
+        function addTask() {
+            const name = document.getElementById('taskName').value.trim();
+            const time = document.getElementById('targetTime').value;
+            const priority = document.getElementById('priority').value;
+
+            if (!name || !time) return alert("Please fill task and time");
+
+            const targetMs = new Date(time).getTime();
+            if (targetMs < Date.now()) return alert("Choose a future time!");
+
+            tasks.push({
+                id: Date.now(),
+                name: name,
+                time: targetMs,
+                priority: priority,
+                isRinging: false
+            });
+
+            saveAndRender();
+            document.getElementById('taskName').value = "";
+        }
+
+        function saveAndRender() {
+            localStorage.setItem('jedidiahTasks', JSON.stringify(tasks));
+            renderTasks();
+        }
+
+        function renderTasks() {
+            const listEl = document.getElementById('taskList');
+            listEl.innerHTML = "";
+            tasks.sort((a, b) => a.time - b.time);
+
+            tasks.forEach(task => {
+                const div = document.createElement('div');
+                div.className = `task-item priority-${task.priority}`;
+                div.innerHTML = `
+                    <div class="task-info">
+                        <h3>${task.name}</h3>
+                        <p>${new Date(task.time).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</p>
+                    </div>
+                    <div class="countdown" id="count-${task.id}">--:--:--</div>
+                    <button class="delete-btn" onclick="deleteTask(${task.id})">×</button>
+                `;
+                listEl.appendChild(div);
+            });
+        }
+
+        function updateCountdowns() {
+            const now = Date.now();
+
+            tasks.forEach(task => {
+                const diff = task.time - now;
+                const countEl = document.getElementById(`count-${task.id}`);
+
+                if (diff <= 0) {
+                    if (countEl) countEl.innerText = "ALARM!";
+                    if (!task.isRinging) triggerAlarm(task);
+                } else {
+                    const hours = Math.floor(diff / 3600000);
+                    const mins = Math.floor((diff % 3600000) / 60000);
+                    const secs = Math.floor((diff % 60000) / 1000);
+                    if (countEl) countEl.innerText = `${String(hours).padStart(2,'0')}:${String(mins).padStart(2,'0')}:${String(secs).padStart(2,'0')}`;
+                }
+            });
+        }
+
+        function triggerAlarm(task) {
+            task.isRinging = true;
+            activeTaskId = task.id;
+
+            // Generate math challenge
+            const num1 = Math.floor(Math.random() * 10) + 3;
+            const num2 = Math.floor(Math.random() * 10) + 3;
+            currentChallengeAnswer = num1 * num2;
+
+            document.getElementById('mathQuestion').innerText = `${num1} × ${num2}`;
+            document.getElementById('challengeOverlay').style.display = 'flex';
+            document.body.classList.add('ringing-bg');
+
+            // === Play Alarm Sound ===
+            if (alarmAudio) {
+                alarmAudio.volume = 1.0;
+                alarmAudio.currentTime = 0;
+
+                alarmAudio.play()
+                    .then(() => console.log("Alarm sound started"))
+                    .catch(err => {
+                        console.error("Play blocked:", err);
+                        // Fallback message
+                        alert("Click OK to enable alarm sound");
+                        alarmAudio.play().catch(() => {});
+                    });
+            }
+        }
+
+        function verifyChallenge() {
+            const userAnswer = parseInt(document.getElementById('mathAnswer').value);
+            if (userAnswer === currentChallengeAnswer) {
+                stopAlarm();
+            } else {
+                const input = document.getElementById('mathAnswer');
+                input.style.borderColor = 'var(--danger)';
+                setTimeout(() => input.style.borderColor = '#333', 600);
+                input.value = "";
+            }
+        }
+
+        function stopAlarm() {
+            if (alarmAudio) {
+                alarmAudio.pause();
+                alarmAudio.currentTime = 0;
+            }
+            document.getElementById('challengeOverlay').style.display = 'none';
+            documen<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jedidiah's Pro Task Manager</title>
+    <style>
         :root {
             --bg-dark: #0a0a0a;
             --card-bg: #161616;
@@ -213,40 +433,46 @@
 
     <div class="task-list" id="taskList"></div>
 
-    <!-- Alarm Audio Element -->
+    <!-- AUDIO ELEMENT -->
     <audio id="alarmSound" loop preload="auto">
         <source src="https://cdn.pixabay.com/audio/2022/03/10/audio_7359560f33.mp3" type="audio/mpeg">
     </audio>
 
     <script>
+        // High Priority: Use the existing jedidiahTasks storage
         let tasks = JSON.parse(localStorage.getItem('jedidiahTasks')) || [];
         let currentChallengeAnswer = null;
         let activeTaskId = null;
-        let sound; // Declared but not assigned yet
+        let alarmAudio = null;
+        let audioUnlocked = false;
 
         window.onload = () => {
-            sound = document.getElementById('alarmSound');
+            alarmAudio = document.getElementById('alarmSound');
+            
+            // Interaction logic to unlock sound
+            const unlockAudio = () => {
+                if (audioUnlocked) return;
+                audioUnlocked = true;
+                alarmAudio.play().then(() => {
+                    alarmAudio.pause();
+                    alarmAudio.currentTime = 0;
+                }).catch(() => {});
+            };
+
+            document.body.addEventListener('click', unlockAudio, { once: true });
             renderTasks();
             setInterval(updateCountdowns, 1000);
-
-            // KEY FIX: Unlock audio on the first click anywhere on the page
-            document.body.addEventListener('click', () => {
-                console.log("Audio unlocked");
-            }, { once: true });
         };
 
         function addTask() {
-            const name = document.getElementById('taskName').value;
+            const name = document.getElementById('taskName').value.trim();
             const time = document.getElementById('targetTime').value;
             const priority = document.getElementById('priority').value;
 
-            if (!name || !time) return;
+            if (!name || !time) return alert("Please fill task and time");
 
             const targetMs = new Date(time).getTime();
-            if (targetMs < Date.now()) {
-                alert("Choose a future time!");
-                return;
-            }
+            if (targetMs < Date.now()) return alert("Choose a future time!");
 
             tasks.push({
                 id: Date.now(),
@@ -258,6 +484,7 @@
 
             saveAndRender();
             document.getElementById('taskName').value = "";
+            if(alarmAudio) alarmAudio.load(); // Prime for later
         }
 
         function saveAndRender() {
@@ -276,7 +503,7 @@
                 div.innerHTML = `
                     <div class="task-info">
                         <h3>${task.name}</h3>
-                        <p>${new Date(task.time).toLocaleTimeString()}</p>
+                        <p>${new Date(task.time).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</p>
                     </div>
                     <div class="countdown" id="count-${task.id}">--:--:--</div>
                     <button class="delete-btn" onclick="deleteTask(${task.id})">×</button>
@@ -298,7 +525,7 @@
                     const hours = Math.floor(diff / 3600000);
                     const mins = Math.floor((diff % 3600000) / 60000);
                     const secs = Math.floor((diff % 60000) / 1000);
-                    if (countEl) countEl.innerText = `${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+                    if (countEl) countEl.innerText = `${String(hours).padStart(2,'0')}:${String(mins).padStart(2,'0')}:${String(secs).padStart(2,'0')}`;
                 }
             });
         }
@@ -306,26 +533,20 @@
         function triggerAlarm(task) {
             task.isRinging = true;
             activeTaskId = task.id;
-            
+
+            // Multiplication challenge for "friction"
             const num1 = Math.floor(Math.random() * 10) + 3;
             const num2 = Math.floor(Math.random() * 10) + 3;
             currentChallengeAnswer = num1 * num2;
-            
+
             document.getElementById('mathQuestion').innerText = `${num1} × ${num2}`;
             document.getElementById('challengeOverlay').style.display = 'flex';
             document.body.classList.add('ringing-bg');
-            
-            // Re-check sound variable in case window.onload was weird
-            if (!sound) sound = document.getElementById('alarmSound');
 
-            sound.volume = 1.0; 
-            let playPromise = sound.play();
-
-            if (playPromise !== undefined) {
-                playPromise.catch(error => {
-                    console.log("Autoplay prevented. Sound will play upon first interaction.");
-                    // Fallback: If blocked, try to play on next click
-                    document.addEventListener('click', () => { sound.play(); }, { once: true });
+            if (alarmAudio) {
+                alarmAudio.volume = 1.0;
+                alarmAudio.play().catch(() => {
+                    console.log("Waiting for user interaction to play sound.");
                 });
             }
         }
@@ -335,21 +556,35 @@
             if (userAnswer === currentChallengeAnswer) {
                 stopAlarm();
             } else {
-                document.getElementById('mathAnswer').style.borderColor = 'var(--danger)';
-                setTimeout(() => { document.getElementById('mathAnswer').style.borderColor = '#333'; }, 500);
-                document.getElementById('mathAnswer').value = "";
+                const input = document.getElementById('mathAnswer');
+                input.style.borderColor = 'var(--danger)';
+                setTimeout(() => input.style.borderColor = '#333', 600);
+                input.value = "";
             }
         }
 
         function stopAlarm() {
-            tasks = tasks.filter(t => t.id !== activeTaskId);
-            if (sound) {
-                sound.pause();
-                sound.currentTime = 0;
+            if (alarmAudio) {
+                alarmAudio.pause();
+                alarmAudio.currentTime = 0;
             }
             document.getElementById('challengeOverlay').style.display = 'none';
             document.body.classList.remove('ringing-bg');
             document.getElementById('mathAnswer').value = "";
+            tasks = tasks.filter(t => t.id !== activeTaskId);
+            saveAndRender();
+        }
+
+        function deleteTask(id) {
+            tasks = tasks.filter(t => t.id !== id);
+            saveAndRender();
+        }
+    </script>
+</body>
+</html>t.body.classList.remove('ringing-bg');
+            document.getElementById('mathAnswer').value = "";
+
+            tasks = tasks.filter(t => t.id !== activeTaskId);
             saveAndRender();
         }
 
