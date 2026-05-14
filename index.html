@@ -43,6 +43,7 @@
 
         .input-group { margin-bottom: 1.2rem; }
         label { display: block; font-size: 0.7rem; color: #888; text-transform: uppercase; font-weight: 700; margin-bottom: 0.4rem; }
+        
         input, select {
             width: 100%;
             padding: 12px;
@@ -51,7 +52,10 @@
             border-radius: 10px;
             color: white;
             box-sizing: border-box;
+            font-size: 0.9rem;
         }
+
+        input:focus, select:focus { border-color: var(--gold); outline: none; }
 
         .btn {
             width: 100%;
@@ -61,8 +65,10 @@
             border: none;
             cursor: pointer;
             text-transform: uppercase;
+            transition: 0.3s;
         }
         .btn-primary { background: var(--gold); color: black; }
+        .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 5px 15px var(--gold-glow); }
 
         .task-item {
             background: #1a1a1a;
@@ -73,7 +79,10 @@
             justify-content: space-between;
             align-items: center;
             border-left: 5px solid var(--cyan);
+            animation: fadeIn 0.5s ease;
         }
+
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 
         .priority-high { border-left-color: var(--danger); }
         .priority-med { border-left-color: var(--gold); }
@@ -87,6 +96,7 @@
             justify-content: center;
             align-items: center;
             z-index: 9999;
+            backdrop-filter: blur(10px);
         }
 
         .challenge-box {
@@ -97,8 +107,11 @@
             text-align: center;
         }
 
-        #mathQuestion { font-size: 2.5rem; color: var(--gold); margin-bottom: 1.5rem; }
+        #mathQuestion { font-size: 2.5rem; color: var(--gold); margin-bottom: 1.5rem; font-weight: 900; }
         .ringing-bg { background-color: #330000 !important; }
+
+        .delete-btn { background: none; border: none; color: #555; cursor: pointer; font-size: 1.2rem; }
+        .delete-btn:hover { color: var(--danger); }
     </style>
 </head>
 <body>
@@ -106,30 +119,47 @@
     <div id="challengeOverlay">
         <div class="challenge-box">
             <h2 style="color: var(--danger);">WAKE UP!</h2>
+            <p style="color: #888; font-size: 0.8rem;">SOLVE TO STOP ALARM</p>
             <div id="mathQuestion">0 × 0</div>
-            <input type="number" id="mathAnswer" style="font-size: 2rem; width: 80%; text-align: center; margin-bottom: 1rem;">
+            <input type="number" id="mathAnswer" style="font-size: 2rem; width: 80%; text-align: center; margin-bottom: 1rem; background: #000; color: white; border: 1px solid #333;">
             <button class="btn btn-primary" onclick="verifyChallenge()">Verify & Stop</button>
         </div>
     </div>
 
     <div class="main-card">
         <h1>Task Manager Pro</h1>
+        
         <div class="input-group">
-            <label>Task</label>
-            <input type="text" id="taskName" placeholder="e.g. Study SEN 121">
+            <label>Task Description</label>
+            <input type="text" id="taskName" placeholder="e.g. Study SEN 122">
         </div>
-        <div class="input-group">
-            <label>Time</label>
-            <input type="datetime-local" id="targetTime">
+
+        <div style="display: flex; gap: 10px; margin-bottom: 1.2rem;">
+            <div style="flex: 2;">
+                <label>Time</label>
+                <input type="datetime-local" id="targetTime">
+            </div>
+            <div style="flex: 1;">
+                <label>Priority</label>
+                <select id="priority">
+                    <option value="low">Low</option>
+                    <option value="med">Medium</option>
+                    <option value="high">High</option>
+                </select>
+            </div>
         </div>
+
+        <!-- NEW AUDIO SELECTION MENU -->
         <div class="input-group">
-            <label>Priority</label>
-            <select id="priority">
-                <option value="low">Low</option>
-                <option value="med">Medium</option>
-                <option value="high">High</option>
+            <label>Alarm Sound</label>
+            <select id="toneSelect" onchange="previewTone()">
+                <option value="alarm.mp3">Classic Alarm</option>
+                <option value="tone2.mp3">Electronic Beep</option>
+                <option value="tone3.mp3">Digital Siren</option>
+                <option value="tone4.mp3">Urgent Pulse</option>
             </select>
         </div>
+
         <button class="btn btn-primary" onclick="addTask()">Add Task</button>
     </div>
 
@@ -165,12 +195,20 @@
             setInterval(updateCountdowns, 1000);
         };
 
+        function previewTone() {
+            const selectedTone = document.getElementById('toneSelect').value;
+            alarmAudio.src = selectedTone;
+            alarmAudio.play().then(() => {
+                setTimeout(() => { if(!activeTaskId) alarmAudio.pause(); }, 2000);
+            }).catch(e => console.log("Preview blocked - click page first"));
+        }
+
         function addTask() {
-            const name = document.getElementById('taskName').value;
+            const name = document.getElementById('taskName').value.trim();
             const time = document.getElementById('targetTime').value;
             const priority = document.getElementById('priority').value;
 
-            if (!name || !time) return;
+            if (!name || !time) return alert("Fill in task and time!");
 
             tasks.push({
                 id: Date.now(),
@@ -181,6 +219,7 @@
             });
 
             saveAndRender();
+            document.getElementById('taskName').value = "";
         }
 
         function saveAndRender() {
@@ -191,15 +230,18 @@
         function renderTasks() {
             const listEl = document.getElementById('taskList');
             listEl.innerHTML = "";
+            tasks.sort((a, b) => a.time - b.time);
+
             tasks.forEach(task => {
+                const diff = task.time - Date.now();
                 const div = document.createElement('div');
                 div.className = `task-item priority-${task.priority}`;
                 div.innerHTML = `
                     <div>
-                        <strong>${task.name}</strong>
-                        <div id="count-${task.id}">--:--:--</div>
+                        <strong style="display:block;">${task.name}</strong>
+                        <small id="count-${task.id}" style="color:var(--gold); font-family:monospace;">--:--:--</small>
                     </div>
-                    <button onclick="deleteTask(${task.id})">×</button>
+                    <button class="delete-btn" onclick="deleteTask(${task.id})">×</button>
                 `;
                 listEl.appendChild(div);
             });
@@ -210,10 +252,14 @@
             tasks.forEach(task => {
                 const diff = task.time - now;
                 const countEl = document.getElementById(`count-${task.id}`);
+
                 if (diff <= 0) {
                     if (!task.isRinging) triggerAlarm(task);
                 } else if (countEl) {
-                    countEl.innerText = new Date(diff).toISOString().substr(11, 8);
+                    const h = Math.floor(diff / 3600000);
+                    const m = Math.floor((diff % 3600000) / 60000);
+                    const s = Math.floor((diff % 60000) / 1000);
+                    countEl.innerText = `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
                 }
             });
         }
@@ -221,26 +267,32 @@
         function triggerAlarm(task) {
             task.isRinging = true;
             activeTaskId = task.id;
-            const n1 = Math.floor(Math.random() * 7) + 3;
-            const n2 = Math.floor(Math.random() * 7) + 3;
+            
+            // Set the audio source to whatever is currently selected in the dropdown
+            alarmAudio.src = document.getElementById('toneSelect').value;
+
+            const n1 = Math.floor(Math.random() * 7) + 4;
+            const n2 = Math.floor(Math.random() * 7) + 4;
             currentChallengeAnswer = n1 * n2;
 
             document.getElementById('mathQuestion').innerText = `${n1} × ${n2}`;
             document.getElementById('challengeOverlay').style.display = 'flex';
             document.body.classList.add('ringing-bg');
 
-            if (alarmAudio) {
-                alarmAudio.play().catch(() => alert("WAKE UP!"));
-            }
+            alarmAudio.play().catch(() => alert("ALARM: " + task.name));
         }
 
         function verifyChallenge() {
             if (parseInt(document.getElementById('mathAnswer').value) === currentChallengeAnswer) {
-                if (alarmAudio) alarmAudio.pause();
+                alarmAudio.pause();
                 document.getElementById('challengeOverlay').style.display = 'none';
                 document.body.classList.remove('ringing-bg');
+                document.getElementById('mathAnswer').value = "";
                 tasks = tasks.filter(t => t.id !== activeTaskId);
+                activeTaskId = null;
                 saveAndRender();
+            } else {
+                alert("Incorrect! Try again.");
             }
         }
 
