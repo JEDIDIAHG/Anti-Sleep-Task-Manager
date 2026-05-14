@@ -213,20 +213,26 @@
 
     <div class="task-list" id="taskList"></div>
 
-    <audio id="alarmSound" loop>
-        <!-- Swapped to a more aggressive Siren/Alarm sound -->
-        <source src="https://actions.google.com/sounds/v1/emergency/emergency_siren_short.ogg" type="audio/ogg">
+    <!-- Alarm Audio Element -->
+    <audio id="alarmSound" loop preload="auto">
+        <source src="https://cdn.pixabay.com/audio/2022/03/10/audio_7359560f33.mp3" type="audio/mpeg">
     </audio>
 
     <script>
         let tasks = JSON.parse(localStorage.getItem('jedidiahTasks')) || [];
         let currentChallengeAnswer = null;
         let activeTaskId = null;
-        const sound = document.getElementById('alarmSound');
+        let sound; // Declared but not assigned yet
 
         window.onload = () => {
+            sound = document.getElementById('alarmSound');
             renderTasks();
             setInterval(updateCountdowns, 1000);
+
+            // KEY FIX: Unlock audio on the first click anywhere on the page
+            document.body.addEventListener('click', () => {
+                console.log("Audio unlocked");
+            }, { once: true });
         };
 
         function addTask() {
@@ -309,9 +315,19 @@
             document.getElementById('challengeOverlay').style.display = 'flex';
             document.body.classList.add('ringing-bg');
             
-            // LOUD MODE: Force volume to maximum
+            // Re-check sound variable in case window.onload was weird
+            if (!sound) sound = document.getElementById('alarmSound');
+
             sound.volume = 1.0; 
-            sound.play().catch(() => console.log("User interaction required for audio"));
+            let playPromise = sound.play();
+
+            if (playPromise !== undefined) {
+                playPromise.catch(error => {
+                    console.log("Autoplay prevented. Sound will play upon first interaction.");
+                    // Fallback: If blocked, try to play on next click
+                    document.addEventListener('click', () => { sound.play(); }, { once: true });
+                });
+            }
         }
 
         function verifyChallenge() {
@@ -327,8 +343,10 @@
 
         function stopAlarm() {
             tasks = tasks.filter(t => t.id !== activeTaskId);
-            sound.pause();
-            sound.currentTime = 0;
+            if (sound) {
+                sound.pause();
+                sound.currentTime = 0;
+            }
             document.getElementById('challengeOverlay').style.display = 'none';
             document.body.classList.remove('ringing-bg');
             document.getElementById('mathAnswer').value = "";
